@@ -1,0 +1,289 @@
+<!--
+Simple Car Game
+File: Simple-Car-Game.html
+
+README (top of file):
+--------------------
+Project: Simple Car Game (JavaScript)
+Author: <Reyhane Jafari>
+Description:
+ A minimal, single-file car dodging game built with HTML5 Canvas and plain JavaScript.
+ Features:
+ - Player car that can move left/right (keyboard arrows or A/D)
+ - Incoming obstacles that spawn progressively faster
+ - Score system (time-based + points for dodging)
+ - Game Over screen and Restart button
+ - Responsive canvas (keeps aspect ratio)
+ - Touch controls for mobile (tap left/right sides)
+-->
+
+<!doctype html>
+<html lang="fa">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Simple Car Game — CS50 Final Project</title>
+  <style>
+    :root{--bg:#111;--track:#2c2c2c;--lane:#333;--accent:#ffd166;--text:#e6eef8}
+    html,body{height:100%;margin:0;font-family:Segoe UI, Roboto, "Helvetica Neue", Arial}
+    body{display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#081426 0%, #02121b 100%);color:var(--text)}
+    .wrapper{width:900px;max-width:96vw;padding:20px;box-sizing:border-box}
+    canvas{display:block;background:var(--track);width:100%;height:auto;border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,.6)}
+    .hud{display:flex;justify-content:space-between;align-items:center;margin:10px 0}
+    .btn{background:var(--accent);color:#000;padding:8px 12px;border-radius:8px;border:0;font-weight:600;cursor:pointer}
+    .info{font-size:14px;opacity:.9}
+    .overlay{position:absolute;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center}
+    /* game over box */
+    .box{background:rgba(10,12,18,.95);padding:22px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.6);text-align:center}
+    .box h2{margin:0 0 10px;color:var(--accent)}
+    .small{font-size:13px;color:#cbd5e1}
+    @media (max-width:480px){.wrapper{padding:10px}}
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="hud">
+      <div class="info">Simple Car Game — use ← → or A / D (tap left/right on mobile)</div>
+      <div>
+        <button id="startBtn" class="btn">Start / Restart</button>
+      </div>
+    </div>
+
+    <div style="position:relative">
+      <canvas id="game" width="600" height="900"></canvas>
+      <div id="overlay" class="overlay" style="pointer-events:none;display:none">
+        <div class="box" id="gameBox">
+          <h2 id="boxTitle">Game Over</h2>
+          <p id="boxText" class="small">Score: 0</p>
+          <button id="retryBtn" class="btn">Play Again</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:10px;color:#a9bacb;font-size:13px">Score: <span id="score">0</span> &nbsp; • &nbsp; Speed: <span id="speed">1</span></div>
+  </div>
+
+  <script>
+  // Simple Car Game — plain JS
+  (()=>{
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const startBtn = document.getElementById('startBtn');
+    const retryBtn = document.getElementById('retryBtn');
+    const overlay = document.getElementById('overlay');
+    const boxTitle = document.getElementById('boxTitle');
+    const boxText = document.getElementById('boxText');
+    const scoreEl = document.getElementById('score');
+    const speedEl = document.getElementById('speed');
+
+    const W = canvas.width, H = canvas.height;
+    const road = {x: W*0.15, width: W*0.7};
+    const laneCount = 3;
+    const laneWidth = road.width / laneCount;
+
+    let keys = {};
+    let game = null;
+
+    function resetGame(){
+      game = {
+        running: false,
+        player: {lane:1, x: road.x + laneWidth*1 + laneWidth/2, y: H - 160, w: 46, h: 90},
+        obstacles: [],
+        tick:0,
+        spawnTimer:0,
+        spawnInterval: 80,
+        speed: 3,
+        score:0
+      };
+      updateHUD();
+    }
+
+    function start(){
+      resetGame();
+      game.running = true;
+      overlay.style.display='none';
+      gameLoop();
+    }
+
+    function gameOver(){
+      game.running = false;
+      overlay.style.display='flex';
+      boxTitle.textContent = 'Game Over';
+      boxText.textContent = 'Score: ' + Math.floor(game.score);
+    }
+
+    function spawnObstacle(){
+      const lane = Math.floor(Math.random()*laneCount);
+      const w = laneWidth*0.7;
+      const h = 60 + Math.random()*60;
+      const x = road.x + lane*laneWidth + (laneWidth - w)/2;
+      game.obstacles.push({x,y:-h,h,w,lane});
+    }
+
+    function rectsCollide(a,b){
+      return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+    }
+
+    function update(){
+      if(!game.running) return;
+      game.tick++;
+
+      // increase difficulty
+      if(game.tick % 600 === 0){ game.speed += 0.5; game.spawnInterval = Math.max(30, game.spawnInterval - 6); }
+
+      // player movement (smooth lane change)
+      if(keys['ArrowLeft'] || keys['a'] ){ if(game.player.lane>0) game.player.lane--; keys['ArrowLeft']=false; keys['a']=false }
+      if(keys['ArrowRight'] || keys['d']){ if(game.player.lane<laneCount-1) game.player.lane++; keys['ArrowRight']=false; keys['d']=false }
+
+      // target x based on lane
+      const targetX = road.x + game.player.lane*laneWidth + (laneWidth - game.player.w)/2;
+      game.player.x += (targetX - game.player.x) * 0.28;
+
+      // spawn
+      game.spawnTimer++;
+      if(game.spawnTimer >= game.spawnInterval){ spawnObstacle(); game.spawnTimer = 0; }
+
+      // move obstacles
+      for(let i=game.obstacles.length-1;i>=0;i--){
+        const o = game.obstacles[i];
+        o.y += game.speed * (1 + (o.h-60)/120);
+        if(o.y > H + 100){ game.obstacles.splice(i,1); game.score += 10; }
+      }
+
+      // collision detection
+      const playerRect = {x:game.player.x, y:game.player.y, w:game.player.w, h:game.player.h};
+      for(const o of game.obstacles){
+        const obsRect = {x:o.x, y:o.y, w:o.w, h:o.h};
+        if(rectsCollide(playerRect, obsRect)) { gameOver(); return; }
+      }
+
+      // score increases over time
+      game.score += 0.2 + game.speed*0.02;
+      updateHUD();
+    }
+
+    function updateHUD(){
+      scoreEl.textContent = Math.floor(game.score);
+      speedEl.textContent = Math.round(game.speed*10)/10;
+    }
+
+    function drawRoad(){
+      // background gradient already applied by canvas css; draw road area
+      ctx.fillStyle = '#1d1f21';
+      ctx.fillRect(road.x, 0, road.width, H);
+
+      // lane separators
+      ctx.strokeStyle = '#4a4a4a';
+      ctx.lineWidth = 4;
+      for(let i=1;i<laneCount;i++){
+        const x = road.x + i*laneWidth;
+        // dashed line
+        ctx.setLineDash([20,16]);
+        ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+      }
+      ctx.setLineDash([]);
+
+      // side borders
+      ctx.strokeStyle = '#070707'; ctx.lineWidth = 8;
+      ctx.strokeRect(road.x, 0, road.width, H);
+    }
+
+    function drawPlayer(){
+      const p = game.player;
+      // simple car: rounded rect + windows
+      ctx.save();
+      ctx.translate(p.x + p.w/2, p.y + p.h/2);
+      ctx.fillStyle = '#ffd166';
+      roundRect(ctx, -p.w/2, -p.h/2, p.w, p.h, 8); ctx.fill();
+      // windows
+      ctx.fillStyle = '#063852';
+      roundRect(ctx, -p.w/2 + 8, -p.h/2 + 14, p.w-16, p.h/3, 6); ctx.fill();
+      // wheels
+      ctx.fillStyle = '#111';
+      ctx.fillRect(-p.w/2 + 6, p.h/2 - 10, 12, 6);
+      ctx.fillRect(p.w/2 - 18, p.h/2 - 10, 12, 6);
+      ctx.restore();
+    }
+
+    function roundRect(ctx,x,y,w,h,r){
+      ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+    }
+
+    function drawObstacles(){
+      for(const o of game.obstacles){
+        ctx.save();
+        ctx.fillStyle = '#9a2a2a';
+        roundRect(ctx, o.x, o.y, o.w, o.h, 6); ctx.fill();
+        // hazard stripes
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.fillRect(o.x+6, o.y+10, o.w-12, 8);
+        ctx.restore();
+      }
+    }
+
+    function render(){
+      // clear
+      ctx.clearRect(0,0,W,H);
+
+      // background gradient
+      const g = ctx.createLinearGradient(0,0,0,H);
+      g.addColorStop(0,'#0b1720'); g.addColorStop(1,'#081018');
+      ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+      // draw road
+      drawRoad();
+
+      // draw obstacles
+      drawObstacles();
+
+      // draw player
+      drawPlayer();
+
+      // top-left small score
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.font = '20px system-ui';
+      ctx.fillText('Score: ' + Math.floor(game.score), 14, 28);
+
+      if(!game.running){
+        ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(W*0.12, H*0.26, W*0.76, H*0.48);
+        ctx.fillStyle = '#ffd166'; ctx.font='34px system-ui'; ctx.fillText('Paused / Press Start', W*0.3, H*0.48);
+      }
+    }
+
+    function loop(){ update(); render(); }
+
+    function gameLoop(){
+      let last = performance.now();
+      function frame(now){
+        const dt = now - last; last = now;
+        loop();
+        if(game.running) requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    }
+
+    // input handlers
+    window.addEventListener('keydown', e=>{ keys[e.key] = true; if(e.key===' '){ if(!game.running) start(); }});
+    window.addEventListener('keyup', e=>{ keys[e.key] = false; });
+
+    startBtn.addEventListener('click', ()=>{ if(game && game.running){ resetGame(); start(); } else start(); });
+    retryBtn.addEventListener('click', ()=>{ start(); overlay.style.display='none'; });
+
+    // touch controls: tap left/right side
+    canvas.addEventListener('touchstart', (ev)=>{
+      const t = ev.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const x = t.clientX - rect.left;
+      if(x < rect.width/2) { if(game.player.lane>0) game.player.lane--; }
+      else { if(game.player.lane<laneCount-1) game.player.lane++; }
+    }, {passive:true});
+
+    // resize handling: keep canvas internal size constant for simplicity,
+    // but you can implement dynamic resizing if you prefer.
+
+    // init
+    resetGame(); render();
+
+  })();
+  </script>
+</body>
+</html>
