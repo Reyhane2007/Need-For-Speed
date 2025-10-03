@@ -7,7 +7,7 @@ README
 --------------------
 Project: Simple Car Game
 Name:Need For Speed (JavaScript)
-Author: <Reyhane Jafari>
+Author: Reyhane Jafari
 Description:
  A minimal, single-file car dodging game built with HTML5 Canvas and plain JavaScript.
  Features:
